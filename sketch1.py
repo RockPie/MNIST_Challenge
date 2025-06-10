@@ -2,6 +2,7 @@ import numpy as np
 import struct, sys, tqdm
 import matplotlib.pyplot as plt
 from loguru import logger
+from sj_lib_ML import *
 
 file_training_data      = 'data/train-images.idx3-ubyte'
 file_training_labels    = 'data/train-labels.idx1-ubyte'
@@ -20,11 +21,11 @@ def load_idx_data_file(file_path):
         magic, size = struct.unpack('>II', f.read(8))
         if magic == 2051:
             nrows, ncols = struct.unpack('>II', f.read(8))
-            logger.info(f"Magic number: {magic}, Size: {size}, Rows: {nrows}, Columns: {ncols}")
+            # logger.info(f"Magic number: {magic}, Size: {size}, Rows: {nrows}, Columns: {ncols}")
             data = np.fromfile(f, dtype=np.dtype(np.uint8).newbyteorder('>'))
             data = data.reshape((size, nrows, ncols))
         elif magic == 2049:
-            logger.info(f"Magic number: {magic}, Size: {size}")
+            # logger.info(f"Magic number: {magic}, Size: {size}")
             data = np.fromfile(f, dtype=np.dtype(np.uint8).newbyteorder('>'))
             data = data.reshape((size,1))
         return data
@@ -56,52 +57,59 @@ def update_NN_parameters(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, l
     b3 -= learning_rate * db3
     return w1, b1, w2, b2, w3, b3
 
-def ReLu(x):
-    return np.maximum(0, x)
-
-def der_ReLu(x):
-    return np.where(x > 0, 1, 0)
-
-def leaky_ReLu(x, alpha=0.01):
-    return np.where(x > 0, x, alpha * x)
-
-def der_leaky_ReLu(x, alpha=0.01):
-    return np.where(x > 0, 1, alpha)
-
-def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
-
-def der_sigmoid(x):
-    sig = sigmoid(x)
-    return sig * (1 - sig)
-
-def softmax(x):
-    exp_x = np.exp(x - np.max(x, axis=0, keepdims=True))
-    return exp_x / np.sum(exp_x, axis=0, keepdims=True)
-
 def forward_propagation(X, w1, b1, w2, b2, w3, b3):
     z1 = w1.dot(X) + b1
-    a1 = ReLu(z1)
+    a1 = leaky_ReLu(z1)
     z2 = w2.dot(a1) + b2
-    a2 = ReLu(z2)
+    a2 = leaky_ReLu(z2)
     z3 = w3.dot(a2) + b3
-    a3 = softmax(z3)
+    a3 = leaky_ReLu(z3)
     return z1, a1, z2, a2, z3, a3
 
 def back_propagation(X, Y, z1, a1, z2, a2, z3, a3, w1, w2, w3):
     m = Y.size
-    dZ3 = 2*(a3 - Y) * der_ReLu(z3)
+    dZ3 = 2*(a3 - Y) * der_leaky_ReLu(z3)
     dw3 = dZ3.dot(a2.T) / m
     db3 = np.sum(dZ3, axis=1, keepdims=True) / m
 
-    dZ2 = w3.T.dot(dZ3) * der_ReLu(z2)
+    dZ2 = w3.T.dot(dZ3) * der_leaky_ReLu(z2)
     dw2 = dZ2.dot(a1.T) / m
     db2 = np.sum(dZ2, axis=1, keepdims=True) / m
 
-    dZ1 = w2.T.dot(dZ2) * der_ReLu(z1)
+    dZ1 = w2.T.dot(dZ2) * der_leaky_ReLu(z1)
     dw1 = dZ1.dot(X.T) / m
     db1 = np.sum(dZ1, axis=1, keepdims=True) / m
     return dw1, db1, dw2, db2, dw3, db3
+
+def back_propagation_adam(X, Y, z1, a1, z2, a2, z3, a3, w1, w2, w3, dw1_last=None, db1_last=None, dw2_last=None, db2_last=None, dw3_last=None, db3_last=None, beta=0.9):
+    m = Y.size
+    dZ3 = 2*(a3 - Y) * der_leaky_ReLu(z3)
+    dw3 = dZ3.dot(a2.T) / m
+    db3 = np.sum(dZ3, axis=1, keepdims=True) / m
+
+    dZ2 = w3.T.dot(dZ3) * der_leaky_ReLu(z2)
+    dw2 = dZ2.dot(a1.T) / m
+    db2 = np.sum(dZ2, axis=1, keepdims=True) / m
+
+    dZ1 = w2.T.dot(dZ2) * der_leaky_ReLu(z1)
+    dw1 = dZ1.dot(X.T) / m
+    db1 = np.sum(dZ1, axis=1, keepdims=True) / m
+
+    # Adam update
+    dw1 = beta * dw1_last + (1 - beta) * dw1 if dw1_last is not None else dw1
+    db1 = beta * db1_last + (1 - beta) * db1 if db1_last is not None else db1
+    dw2 = beta * dw2_last + (1 - beta) * dw2 if dw2_last is not None else dw2
+    db2 = beta * db2_last + (1 - beta) * db2 if db2_last is not None else db2
+    dw3 = beta * dw3_last + (1 - beta) * dw3 if dw3_last is not None else dw3
+    db3 = beta * db3_last + (1 - beta) * db3 if db3_last is not None else db3
+    return dw1, db1, dw2, db2, dw3, db3
+    
+def loss_function(Y, Y_hat):
+    return 2* np.sum((Y_hat - Y) ** 2) / Y.shape[1]  # Mean Squared Error
+
+def accuracy(Y, Y_hat):
+    correct_predictions = np.sum(np.argmax(Y, axis=0) == np.argmax(Y_hat, axis=0))
+    return correct_predictions / float(Y.shape[1])
 
 if __name__ == "__main__":
     (train_data, train_labels), (test_data, test_labels) = load_data()
@@ -112,6 +120,8 @@ if __name__ == "__main__":
     logger.debug(f"Test labels shape: {test_labels.shape}")
 
     number_of_plots = 10
+    target_epoch = 1500
+    epochs = 2500
     
     # Show the first 10 training images
     # plt.figure(figsize=(10, 4))
@@ -121,7 +131,7 @@ if __name__ == "__main__":
     #     plt.title(f"Label: {train_labels[i][0]}")
     #     plt.axis('off')
     # plt.tight_layout()
-    # plt.show()
+    # plt.savefig('dump/sample_training_images.png')
 
     # Flatten and normalize data
     train_data = train_data.reshape(train_data.shape[0], -1).T / 255.0
@@ -132,31 +142,75 @@ if __name__ == "__main__":
         return np.eye(num_classes)[labels.flatten()].T
 
     train_labels_oh = one_hot(train_labels)
-    test_labels_oh = one_hot(test_labels)
+    test_labels_oh  = one_hot(test_labels)
 
-    epochs = 1500
     epochs_monitor_loss = np.zeros(epochs)
     epochs_monitor_test_loss = np.zeros(epochs)
-    learning_rate = 0.01
-    w1, b1, w2, b2, w3, b3 = init_NN_parameters()
+    epochs_monitor_accuracy = np.zeros(epochs)
+    epochs_monitor_test_accuracy = np.zeros(epochs)
 
-    for epoch in tqdm.tqdm(range(epochs), desc="Training Epochs"):
+    learning_rate = 5
+    w1, b1, w2, b2, w3, b3 = init_NN_parameters()
+    dw1_last = None
+    db1_last = None
+    dw2_last = None
+    db2_last = None
+    dw3_last = None
+    db3_last = None
+    # make the progress bar float
+    for epoch in tqdm.tqdm(range(epochs), desc="Training Epochs", unit="epoch", ncols=100, leave=True):
         z1, a1, z2, a2, z3, a3 = forward_propagation(train_data, w1, b1, w2, b2, w3, b3)
         z1_test, a1_test, z2_test, a2_test, z3_test, a3_test = forward_propagation(test_data, w1, b1, w2, b2, w3, b3)
         # Cross-entropy loss
-        loss = -np.mean(np.sum(train_labels_oh * np.log(a3 + 1e-8), axis=0))
-        loss_test = -np.mean(np.sum(test_labels_oh * np.log(a3_test + 1e-8), axis=0))
+        loss = loss_function(train_labels_oh, a3)
+        loss_test = loss_function(test_labels_oh, a3_test)
         epochs_monitor_loss[epoch] = loss
         epochs_monitor_test_loss[epoch] = loss_test
-        dw1, db1, dw2, db2, dw3, db3 = back_propagation(train_data, train_labels_oh, z1, a1, z2, a2, z3, a3, w1, w2, w3)
+
+        accuracy_train = accuracy(train_labels_oh, a3)
+        accuracy_test = accuracy(test_labels_oh, a3_test)
+
+        epochs_monitor_accuracy[epoch] = accuracy_train
+        epochs_monitor_test_accuracy[epoch] = accuracy_test
+
+        # dw1, db1, dw2, db2, dw3, db3 = back_propagation(train_data, train_labels_oh, z1, a1, z2, a2, z3, a3, w1, w2, w3)
+        dw1, db1, dw2, db2, dw3, db3 = back_propagation_adam(train_data, train_labels_oh, z1, a1, z2, a2, z3, a3, w1, w2, w3, dw1_last=dw1_last, db1_last=db1_last, dw2_last=dw2_last, db2_last=db2_last, dw3_last=dw3_last, db3_last=db3_last)
+        # Update the last gradients for Adam
+        dw1_last, db1_last = dw1, db1
+        dw2_last, db2_last = dw2, db2
+        dw3_last, db3_last = dw3, db3
         w1, b1, w2, b2, w3, b3 = update_NN_parameters(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, learning_rate)
 
-    plt.figure(figsize=(10, 5))
+        # print the loss and accuracy every 100 epochs
+        if epoch % 100 == 0:
+            logger.info(f"Epoch {epoch}: -- Training Loss: {loss:.4f}, Accuracy: {accuracy_train*100:.2f}% -- Test Loss: {loss_test:.4f}, Accuracy: {accuracy_test*100:.2f}%")
+
+    logger.info(f"Final Training Loss: {loss:.4f}, Final Test Loss: {loss_test:.4f}")
+    logger.info(f"Final Training Accuracy: {accuracy_train:.4f}, Final Test Accuracy: {accuracy_test:.4f}")
+
+
+
+    # Plotting the loss over epochs
+    plt.figure(figsize=(12, 6))
+    # two axis
+    plt.subplot(1, 2, 1)
     plt.plot(epochs_monitor_loss, label='Training Loss', color='blue')
     plt.plot(epochs_monitor_test_loss, label='Test Loss', color='orange')
-    plt.title('Training Loss Over Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
+    plt.axvline(x=target_epoch, color='red', linestyle='--', label=f'Target Epoch {target_epoch}')
+    # log scale
+    # plt.yscale('log')
     plt.legend()
-    plt.grid()
-    plt.show()
+    plt.title('Loss over Epochs')
+    plt.xlabel('Epochs')
+    plt.tight_layout()
+
+    # Plotting the accuracy over epochs
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_monitor_accuracy, label='Training Accuracy', color='green')
+    plt.plot(epochs_monitor_test_accuracy, label='Test Accuracy', color='red')
+    plt.axvline(x=target_epoch, color='red', linestyle='--', label=f'Target Epoch {target_epoch}')
+    plt.title('Accuracy over Epochs')
+    plt.xlabel('Epochs')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('dump/accuracy_over_epochs.png')
