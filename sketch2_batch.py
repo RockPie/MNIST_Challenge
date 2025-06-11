@@ -40,9 +40,9 @@ def load_data():
 # * === NN Components ===================================================================
 # * =====================================================================================
 def init_NN_parameters():
-    w1 = np.random.randn(16, 28 * 28) - 0.5
-    b1 = np.random.randn(16, 1) - 0.5
-    w2 = np.random.randn(16, 16) - 0.5
+    w1 = np.random.randn(32, 28 * 28) - 0.5
+    b1 = np.random.randn(32, 1) - 0.5
+    w2 = np.random.randn(16, 32) - 0.5
     b2 = np.random.randn(16, 1) - 0.5
     w3 = np.random.randn(10, 16) - 0.5
     b3 = np.random.randn(10, 1) - 0.5
@@ -55,6 +55,17 @@ def update_NN_parameters(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, l
     b2 -= learning_rate * db2
     w3 -= learning_rate * dw3
     b3 -= learning_rate * db3
+    return w1, b1, w2, b2, w3, b3
+
+def update_NN_parameters_limited(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, learning_rate):
+    # Limit the updates to a maximum of 0.1
+    max_update = 0.1
+    w1 -= np.clip(learning_rate * dw1, -max_update, max_update)
+    b1 -= np.clip(learning_rate * db1, -max_update, max_update)
+    w2 -= np.clip(learning_rate * dw2, -max_update, max_update)
+    b2 -= np.clip(learning_rate * db2, -max_update, max_update)
+    w3 -= np.clip(learning_rate * dw3, -max_update, max_update)
+    b3 -= np.clip(learning_rate * db3, -max_update, max_update)
     return w1, b1, w2, b2, w3, b3
 
 def forward_propagation(X, w1, b1, w2, b2, w3, b3):
@@ -127,7 +138,15 @@ if __name__ == "__main__":
     target_train_loss = 0.0
     target_test_loss = 0.0
     epochs = 2500
-    learning_rate = 1
+    learning_rate = 0.5
+
+    batch_size = 200
+
+    # create batches of data
+    train_data_batches = np.array_split(train_data, len(train_data) // batch_size)
+    train_labels_batches = np.array_split(train_labels, len(train_labels) // batch_size)
+    test_data_batches = np.array_split(test_data, len(test_data) // batch_size)
+    test_labels_batches = np.array_split(test_labels, len(test_labels) // batch_size)
     
     # Show the first 10 training images
     # plt.figure(figsize=(10, 4))
@@ -140,15 +159,21 @@ if __name__ == "__main__":
     # plt.savefig('dump/sample_training_images.png')
 
     # Flatten and normalize data
-    train_data = train_data.reshape(train_data.shape[0], -1).T / 255.0
-    test_data = test_data.reshape(test_data.shape[0], -1).T / 255.0
+    train_data = train_data.reshape(train_data.shape[0], -1).T / 255.0    # (784,60000)
+    test_data  = test_data.reshape(test_data.shape[0],  -1).T / 255.0
 
     # One-hot encode labels
     def one_hot(labels, num_classes=10):
         return np.eye(num_classes)[labels.flatten()].T
 
-    train_labels_oh = one_hot(train_labels)
-    test_labels_oh  = one_hot(test_labels)
+    train_labels_oh = one_hot(train_labels)                               # (10,60000)
+    test_labels_oh  = one_hot(test_labels)                                # (10,10000)
+
+    train_data_batches  = np.array_split(train_data,  train_data.shape[1]//batch_size, axis=1)
+    train_labels_batches= np.array_split(train_labels_oh, train_labels_oh.shape[1]//batch_size, axis=1)
+    test_data_batches   = np.array_split(test_data,   test_data.shape[1]//batch_size,  axis=1)
+    num_test_batches = test_labels_oh.shape[1] // batch_size
+    test_labels_batches = np.array_split(test_labels_oh, num_test_batches, axis=1)
 
     epochs_monitor_loss = np.zeros(epochs)
     epochs_monitor_test_loss = np.zeros(epochs)
@@ -164,16 +189,40 @@ if __name__ == "__main__":
     db3_last = None
     # make the progress bar float
     for epoch in tqdm.tqdm(range(epochs), desc="Training Epochs", unit="epoch", ncols=100, leave=True, dynamic_ncols=True, position=0, file=sys.stdout):
-        z1, a1, z2, a2, z3, a3 = forward_propagation(train_data, w1, b1, w2, b2, w3, b3)
-        z1_test, a1_test, z2_test, a2_test, z3_test, a3_test = forward_propagation(test_data, w1, b1, w2, b2, w3, b3)
-        # Cross-entropy loss
-        loss = loss_function(train_labels_oh, a3)
-        loss_test = loss_function(test_labels_oh, a3_test)
+
+        for batch_index in range(len(train_data_batches)):
+            z1, a1, z2, a2, z3, a3 = forward_propagation(train_data_batches[batch_index], w1, b1, w2, b2, w3, b3)
+            # Cross-entropy loss
+            loss = loss_function(train_labels_batches[batch_index], a3)
+            # loss_test = loss_function(test_labels_batches[batch_index], a3_test)
+            # epochs_monitor_loss[epoch] = loss
+            # epochs_monitor_test_loss[epoch] = loss_test
+
+            # accuracy_train = accuracy(train_labels_batches[batch_index], a3)
+            # accuracy_test = accuracy(test_labels_batches[batch_index], a3_test)
+
+            # epochs_monitor_accuracy[epoch] = accuracy_train
+            # epochs_monitor_test_accuracy[epoch] = accuracy_test
+
+            dw1, db1, dw2, db2, dw3, db3 = back_propagation_adam(train_data_batches[batch_index], train_labels_batches[batch_index], z1, a1, z2, a2, z3, a3, w1, w2, w3, dw1_last=dw1_last, db1_last=db1_last, dw2_last=dw2_last, db2_last=db2_last, dw3_last=dw3_last, db3_last=db3_last)
+            # Update the last gradients for Adam
+            dw1_last, db1_last = dw1, db1
+            dw2_last, db2_last = dw2, db2
+            dw3_last, db3_last = dw3, db3
+            w1, b1, w2, b2, w3, b3 = update_NN_parameters_limited(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, learning_rate)
+
+        z1_epoch, a1_epoch, z2_epoch, a2_epoch, z3_epoch, a3_epoch = forward_propagation(train_data, w1, b1, w2, b2, w3, b3)
+        z1_test_epoch, a1_test_epoch, z2_test_epoch, a2_test_epoch, z3_test_epoch, a3_test_epoch = forward_propagation(test_data, w1, b1, w2, b2, w3, b3)
+
+        loss        = loss_function(train_labels_oh, a3_epoch)
+        loss_test   = loss_function(test_labels_oh, a3_test_epoch)
+        accuracy_train  = accuracy(train_labels_oh, a3_epoch)
+        accuracy_test   = accuracy(test_labels_oh, a3_test_epoch)
+
         epochs_monitor_loss[epoch] = loss
         epochs_monitor_test_loss[epoch] = loss_test
-
-        accuracy_train = accuracy(train_labels_oh, a3)
-        accuracy_test = accuracy(test_labels_oh, a3_test)
+        epochs_monitor_accuracy[epoch] = accuracy_train
+        epochs_monitor_test_accuracy[epoch] = accuracy_test
 
         if epoch == target_epoch:
             target_train_accuracy = accuracy_train
@@ -181,24 +230,12 @@ if __name__ == "__main__":
             target_train_loss = loss
             target_test_loss = loss_test
 
-        epochs_monitor_accuracy[epoch] = accuracy_train
-        epochs_monitor_test_accuracy[epoch] = accuracy_test
-
-        # dw1, db1, dw2, db2, dw3, db3 = back_propagation(train_data, train_labels_oh, z1, a1, z2, a2, z3, a3, w1, w2, w3)
-        dw1, db1, dw2, db2, dw3, db3 = back_propagation_adam(train_data, train_labels_oh, z1, a1, z2, a2, z3, a3, w1, w2, w3, dw1_last=dw1_last, db1_last=db1_last, dw2_last=dw2_last, db2_last=db2_last, dw3_last=dw3_last, db3_last=db3_last)
-        # Update the last gradients for Adam
-        dw1_last, db1_last = dw1, db1
-        dw2_last, db2_last = dw2, db2
-        dw3_last, db3_last = dw3, db3
-        w1, b1, w2, b2, w3, b3 = update_NN_parameters(w1, b1, w2, b2, w3, b3, dw1, db1, dw2, db2, dw3, db3, learning_rate)
-
         # print the loss and accuracy every 100 epochs
         if epoch % 100 == 0:
             logger.info(f"Epoch {epoch}: -- Training Loss: {loss:.4f}, Accuracy: {accuracy_train*100:.2f}% -- Test Loss: {loss_test:.4f}, Accuracy: {accuracy_test*100:.2f}%")
 
     logger.info(f"Final Training Loss: {loss:.4f}, Final Test Loss: {loss_test:.4f}")
     logger.info(f"Final Training Accuracy: {accuracy_train:.4f}, Final Test Accuracy: {accuracy_test:.4f}")
-
 
     # Plotting the loss over epochs
     plt.figure(figsize=(12, 6))
