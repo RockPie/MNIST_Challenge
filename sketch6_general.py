@@ -32,20 +32,30 @@ def load_data():
     test_labels = load_idx_data_file(file_test_labels)
     return (training_data, training_labels), (test_data, test_labels)
 
+def image_offset(image, row, col):
+    # offset the image by row and col, maintaining the original size
+    img_size = image.shape[0]
+    offset_image = np.zeros_like(image)
+    for r in range(img_size):
+        for c in range(img_size):
+            new_r = (r + row) % img_size
+            new_c = (c + col) % img_size
+            offset_image[new_r, new_c] = image[r, c]
+    return offset_image
+
 # * === NN Components ===================================================================
 # * ==============================================================
-
+img_size     = 28
 local_block_size_l1 = 3 # unit of pixels
 local_block_step_l1 = 1 # unit of pixels
-local_block_size_l2 = 2 # unit of local blocks on layer 1
+local_block_size_l2 = 3 # unit of local blocks on layer 1
 local_block_step_l2 = 2 # unit of local blocks on layer 1
+layer_3_size = 32
+layer_4_size = 10
 
 def init_NN_parameters_weighted_local():
-    img_size     = 28
     layer_1_size = ((img_size - local_block_size_l1) // local_block_step_l1 + 1) ** 2
     layer_2_size = ((int(np.sqrt(layer_1_size)) - local_block_size_l2) // local_block_step_l2 + 1) ** 2
-    layer_3_size = 25
-    layer_4_size = 10
 
     print(" --- Neural Network Parameters -------------------------")
     print(f"Layer 1 size: {layer_1_size}, Layer 2 size: {layer_2_size}")
@@ -120,12 +130,18 @@ def forward_propagation(X, w1, b1, w2, b2, w3, b3, w4, b4):
     leaky_rate = 1e-2
     z1 = w1.dot(X) + b1
     a1 = leaky_ReLu(z1, alpha=leaky_rate)
-    z2 = w2.dot(a1) + b2
-    a2 = leaky_ReLu(z2, alpha=leaky_rate)
-    z3 = w3.dot(a2) + b3
-    a3 = leaky_ReLu(z3, alpha=leaky_rate)
+    # a1_drop, dropout_mask = dropout(a1, p=0.1)
+    a1_drop = a1  # No dropout in this version
 
+    z2 = w2.dot(a1_drop) + b2
+    a2 = leaky_ReLu(z2, alpha=leaky_rate)
+    # a2_drop, dropout_mask = dropout(a2, p=0.01)
+    a2_drop = a2  # No dropout in this version
+
+    z3 = w3.dot(a2_drop) + b3
+    a3 = leaky_ReLu(z3, alpha=leaky_rate)
     a3_drop, dropout_mask = dropout(a3, p=0.1)
+
     z4 = w4.dot(a3_drop) + b4
 
     softmax_temp = 3.0
@@ -181,43 +197,6 @@ def loss_function(Y, Y_hat):
     # return loss_func_log(Y, Y_hat)
 
 
-def zoom_image(image, zoom_x=1.0, zoom_y=1.0):
-    h, w = image.shape
-    new_h, new_w = int(h * zoom_y), int(w * zoom_x)
-    
-    zoomed_image = np.zeros((new_h, new_w), dtype=image.dtype)
-    
-    for i in range(new_h):
-        for j in range(new_w):
-            orig_i = int(i / zoom_y)
-            orig_j = int(j / zoom_x)
-            if orig_i < h and orig_j < w:
-                zoomed_image[i, j] = image[orig_i, orig_j]
-    
-    return zoomed_image
-
-def rotate_image(image, angle_deg=0):
-    angle_rad   = np.deg2rad(angle_deg)
-    cos_a       = np.cos(angle_rad)
-    sin_a       = np.sin(angle_rad)
-
-    h, w        = image.shape
-    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
-
-    y, x    = np.indices((h, w))
-    x_flat  = x.flatten() - cx
-    y_flat  = y.flatten() - cy
-
-    x_rot = cos_a * x_flat + sin_a * y_flat + cx
-    y_rot = -sin_a * x_flat + cos_a * y_flat + cy
-
-    x_rot = np.round(x_rot).astype(int)
-    y_rot = np.round(y_rot).astype(int)
-
-    mask = (x_rot >= 0) & (x_rot < w) & (y_rot >= 0) & (y_rot < h)
-    rotated_image = np.zeros_like(image)
-    rotated_image[y.flatten()[mask], x.flatten()[mask]] = image[y_rot[mask], x_rot[mask]]
-    return rotated_image
 
 # * === Main Execution ==================================================================
 # * =====================================================================================
@@ -225,51 +204,36 @@ if __name__ == "__main__":
     (train_data, train_labels), (test_data, test_labels) = load_data()
 
     # rotate the training data
-    number_of_rotations = 4
+    number_of_rotations = 6
     rotation_limit = 20
     # create number_of_rotations copies of the training data, each rotated by a random angle
     train_data_rotated = []
     for i in range(number_of_rotations):
         angle = i * 2 * rotation_limit / (number_of_rotations - 1) - rotation_limit
         # ramdom x and y zoom factor between 0.8 and 1.2
-        zoom_factor_x = np.random.uniform(0.8, 1.2)
-        zoom_factor_y = np.random.uniform(0.8, 1.2)
-        print(f"Rotating training data by {angle:.2f} degrees...")
+        # zoom_factor_x = np.random.uniform(0.8, 1.2)
+        # zoom_factor_y = np.random.uniform(0.8, 1.2)
+        # print(f"Rotating training data by {angle:.2f} degrees...")
         rotated_data = np.array([rotate_image(image, angle) for image in train_data])
+        # randomly offset the image by a random number of pixels in x and y direction
+        # offset_x = np.random.randint(-3, 3)
+        # offset_y = np.random.randint(-3, 3)
+        # rotated_data = np.array([image_offset(image, offset_y, offset_x) for image in rotated_data])
         train_data_rotated.append(rotated_data)
 
-    # print the first 5 images with all rotations
-    # for i in range(5):
-    #     plt.figure(figsize=(10, 2))
-    #     for j, rotated_data in enumerate(train_data_rotated):
-    #         plt.subplot(1, number_of_rotations + 1, j + 1)
-    #         plt.imshow(rotated_data[i], cmap='gray')
-    #         plt.title(f'Rotation {j * 60 - 30}°')
-    #         plt.axis('off')
-    #     plt.tight_layout()
-    #     plt.savefig(f'dump/rotated_image_{i}.png')
-
-    # print("Smoothing training data with a 3x3 kernel...")
-    # train_smoothed_data = image_LPF(train_data, kernel_size=3)
-    
-    # print(f"Training data shape: {train_data.shape}")
-    # print(f"Training labels shape: {train_labels.shape}")
-    # print(f"Test data shape: {test_data.shape}")
-    # print(f"Test labels shape: {test_labels.shape}")
-
     number_of_plots         = 10
-    target_epoch            = 1500
+    target_epoch            = 500
     epoch_print_every       = 10
     target_train_accuracy   = 0.0
     target_test_accuracy    = 0.0
     target_train_loss       = 0.0
     target_test_loss        = 0.0
 
-    epochs            = 1600
-    learning_rate_max = 0.05
-    learning_rate_min = 0.01
-    batch_size        = 256
-    momentum_beta     = 0.9
+    epochs                  = 600
+    learning_rate_max       = 0.05
+    learning_rate_min       = 0.005
+    batch_size              = 256
+    momentum_beta           = 0.9
 
     # create batches of data
     train_data_batches = np.array_split(train_data, len(train_data) // batch_size)
@@ -344,13 +308,7 @@ if __name__ == "__main__":
             target_train_loss_array.append(loss)
             target_test_loss_array.append(loss_test)
 
-        # if epoch == target_epoch:
-        #     # target_train_accuracy = accuracy_train
-        #     # target_test_accuracy = accuracy_test
-        #     target_train_loss = loss
-        #     target_test_loss = loss_test
-
-        # print the loss and accuracy every 100 epochs
+        # print the loss and accuracy
         if epoch % epoch_print_every == 0:
             # tqdm.write(f"[Epoch {epoch:03d}] Train Loss: {loss:.4f}, Acc: {accuracy_train*100:.2f}%, Test Loss: {loss_test:.4f}, Acc: {accuracy_test*100:.2f}%")
             print(f"[Epoch {epoch:03d}] Train Loss: {loss:.4f}, Acc: {accuracy_train*100:.2f}%, Test Loss: {loss_test:.4f}, Acc: {accuracy_test*100:.2f}%")

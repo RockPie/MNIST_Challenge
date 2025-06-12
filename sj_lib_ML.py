@@ -60,6 +60,11 @@ def loss_func_categorical_crossentropy(Y, Y_hat):
     Y_hat = np.clip(Y_hat, epsilon, 1 - epsilon)
     return -np.mean(np.sum(Y * np.log(Y_hat), axis=0))
 
+def loss_func_squared_L2(Y, Y_hat, w, lambda_reg=0.01):
+    loss = 2 * np.mean(np.sum((Y - Y_hat) ** 2, axis=0))
+    reg_loss = lambda_reg * np.sum(w ** 2)
+    return loss + reg_loss
+
 def exp_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1, decay_rate=0.1):
     if epoch_current >= epoch_total:
         return final_lr
