@@ -1,5 +1,17 @@
 import numpy as np
 
+def one_hot(labels, num_classes=10):
+    return np.eye(num_classes)[labels.flatten()].T
+
+def one_hot_eplison(labels, num_classes=10, epsilon=1e-15):
+    one_hot_labels = np.eye(num_classes)[labels.flatten()].T
+    # replace 0s with epsilon
+    one_hot_labels = np.clip(one_hot_labels, epsilon, 1 - epsilon)
+    return one_hot_labels
+
+def mom(update, last, beta=0.9):
+    return beta * last + (1 - beta) * update if last is not None else update
+
 def ReLu(x):
     return np.maximum(0, x)
 
@@ -19,13 +31,17 @@ def der_sigmoid(x):
     sig = sigmoid(x)
     return sig * (1 - sig)
 
-def softmax(x):
-    exp_x = np.exp(x - np.max(x, axis=0, keepdims=True))
+def softmax(x, temp=2.0):
+    exp_x = np.exp(x - np.max(x, axis=0, keepdims=True)) / temp
     return exp_x / np.sum(exp_x, axis=0, keepdims=True)
 
-def der_softmax(x):
-    s = softmax(x)
+def der_softmax(x, temp=2.0):
+    s = softmax(x, temp)
     return s * (1 - s)
+
+def dropout(a, p):
+    mask = (np.random.rand(*a.shape) > p) / (1.0 - p)
+    return a * mask, mask
 
 def accuracy(Y, Y_hat):
     correct_predictions = np.sum(np.argmax(Y, axis=0) == np.argmax(Y_hat, axis=0))
@@ -37,7 +53,7 @@ def loss_func_log(Y, Y_hat):
     return -np.mean(np.sum(Y * np.log(Y_hat), axis=0))
 
 def loss_func_squared(Y, Y_hat):
-    return 2* np.mean(np.sum((Y - Y_hat) ** 2, axis=0))/ Y.shape[1]
+    return 2* np.mean(np.sum((Y - Y_hat) ** 2, axis=0))
 
 def loss_func_categorical_crossentropy(Y, Y_hat):
     epsilon = 1e-15
@@ -48,4 +64,10 @@ def exp_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1, de
     if epoch_current >= epoch_total:
         return final_lr
     else:
-        return initial_lr * np.exp(-decay_rate * (epoch_current / epoch_total))
+        return max(final_lr, initial_lr * np.exp(-decay_rate * (epoch_current / epoch_total)))
+    
+def linear_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1):
+    if epoch_current >= epoch_total:
+        return final_lr
+    else:
+        return max(final_lr, initial_lr - (initial_lr - final_lr) * (epoch_current / epoch_total))
