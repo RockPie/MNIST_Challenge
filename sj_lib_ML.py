@@ -3,7 +3,7 @@ import numpy as np
 def one_hot(labels, num_classes=10):
     return np.eye(num_classes)[labels.flatten()].T
 
-def one_hot_eplison(labels, num_classes=10, epsilon=1e-15):
+def one_hot_eplison(labels, num_classes=10, epsilon=1e-6):
     one_hot_labels = np.eye(num_classes)[labels.flatten()].T
     # replace 0s with epsilon
     one_hot_labels = np.clip(one_hot_labels, epsilon, 1 - epsilon)
@@ -64,18 +64,22 @@ def loss_func_squared_L2(Y, Y_hat, w, lambda_reg=0.01):
     loss = 2 * np.mean(np.sum((Y - Y_hat) ** 2, axis=0))
     reg_loss = lambda_reg * np.sum(w ** 2)
     return loss + reg_loss
-
-def exp_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1, decay_rate=0.1):
-    if epoch_current >= epoch_total:
-        return final_lr
-    else:
-        return max(final_lr, initial_lr * np.exp(-decay_rate * (epoch_current / epoch_total)))
     
 def linear_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1):
     if epoch_current >= epoch_total:
         return final_lr
     else:
         return max(final_lr, initial_lr - (initial_lr - final_lr) * (epoch_current / epoch_total))
+    
+def exp_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1):
+    if epoch_current >= epoch_total:
+        return final_lr
+    else:
+        exp_n = initial_lr / final_lr
+        exp_n = np.log(exp_n) / (epoch_total - 1)
+        res = final_lr * np.exp(exp_n * (epoch_total - epoch_current - 1))
+        # print(f"output: {res}, exp_n: {exp_n}, epoch_current: {epoch_current}, epoch_total: {epoch_total}")
+        return res
     
 def rotate_image(image, angle_deg=0):
     angle_rad   = np.deg2rad(angle_deg)
@@ -99,3 +103,13 @@ def rotate_image(image, angle_deg=0):
     rotated_image = np.zeros_like(image)
     rotated_image[y.flatten()[mask], x.flatten()[mask]] = image[y_rot[mask], x_rot[mask]]
     return rotated_image
+
+def image_offset(image, row, col):
+    h, w = image.shape
+    offset_image = np.zeros_like(image)
+    for r in range(h):
+        for c in range(w):
+            new_r = (r + row) % h
+            new_c = (c + col) % w
+            offset_image[new_r, new_c] = image[r, c]
+    return offset_image

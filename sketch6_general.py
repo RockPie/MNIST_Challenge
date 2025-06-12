@@ -47,7 +47,7 @@ def image_offset(image, row, col):
 # * ==============================================================
 img_size     = 28
 local_block_size_l1 = 3 # unit of pixels
-local_block_step_l1 = 1 # unit of pixels
+local_block_step_l1 = 2 # unit of pixels
 local_block_size_l2 = 3 # unit of local blocks on layer 1
 local_block_step_l2 = 2 # unit of local blocks on layer 1
 layer_3_size = 32
@@ -151,10 +151,13 @@ def forward_propagation(X, w1, b1, w2, b2, w3, b3, w4, b4):
 
 def back_propagation_momentum(X, Y, z1, a1, z2, a2, z3, a3, z4, a4, w1, w2, w3, w4, dw1_last=None, db1_last=None, dw2_last=None, db2_last=None, dw3_last=None, db3_last=None, dw4_last=None, db4_last=None, beta=0.90, dropout_mask=None, softmax_temp=2.0):
     m = Y.shape[1]
+    lambda_L2_reg = 0.05
     dZ4 = a4 - Y
     if softmax_temp != 1.0:
         dZ4 *= softmax_temp
     dw4 = dZ4.dot(a3.T) / m
+    # L2 regularization
+    dw4 += lambda_L2_reg * w4 / m
     db4 = np.sum(dZ4, axis=1, keepdims=True) / m
 
     dZ3_raw = w4.T.dot(dZ4) * der_leaky_ReLu(z3)
@@ -164,18 +167,21 @@ def back_propagation_momentum(X, Y, z1, a1, z2, a2, z3, a3, z4, a4, w1, w2, w3, 
     dZ3 = dZ3_raw
 
     dw3 = dZ3.dot(a2.T) / m
+    dw3 += lambda_L2_reg * w3 / m
     db3 = np.sum(dZ3, axis=1, keepdims=True) / m
 
     dZ2_raw = w3.T.dot(dZ3) * der_leaky_ReLu(z2)
     dZ2 = dZ2_raw
 
     dw2 = dZ2.dot(a1.T) / m
+    dw2 += lambda_L2_reg * w2 / m
     db2 = np.sum(dZ2, axis=1, keepdims=True) / m
 
     dZ1_raw = w2.T.dot(dZ2) * der_leaky_ReLu(z1)
     dZ1 = dZ1_raw
 
     dw1 = dZ1.dot(X.T) / m
+    dw1 += lambda_L2_reg * w1 / m
     db1 = np.sum(dZ1, axis=1, keepdims=True) / m
 
     dw1 = mom(dw1, dw1_last)
