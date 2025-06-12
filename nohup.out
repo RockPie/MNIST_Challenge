@@ -1,0 +1,14 @@
+Rotating training data by -20.00 degrees...
+Rotating training data by -6.67 degrees...
+Rotating training data by 6.67 degrees...
+Traceback (most recent call last):
+  File "/home/shihai/code/MNIST_Challenge/sketch6_general.py", line 238, in <module>
+    rotated_data = np.array([rotate_image(image, angle) for image in train_data])
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shihai/code/MNIST_Challenge/sketch6_general.py", line 218, in rotate_image
+    rotated_image = np.zeros_like(image)
+                    ^^^^^^^^^^^^^^^^^^^^
+  File "/home/shihai/anaconda3/envs/general/lib/python3.12/site-packages/numpy/_core/numeric.py", line 59, in _zeros_like_dispatcher
+    def _zeros_like_dispatcher(
+    
+KeyboardInterrupt

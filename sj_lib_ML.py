@@ -71,3 +71,26 @@ def linear_learning_rate(epoch_current, epoch_total, initial_lr=5, final_lr=0.1)
         return final_lr
     else:
         return max(final_lr, initial_lr - (initial_lr - final_lr) * (epoch_current / epoch_total))
+    
+def rotate_image(image, angle_deg=0):
+    angle_rad   = np.deg2rad(angle_deg)
+    cos_a       = np.cos(angle_rad)
+    sin_a       = np.sin(angle_rad)
+
+    h, w        = image.shape
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+
+    y, x    = np.indices((h, w))
+    x_flat  = x.flatten() - cx
+    y_flat  = y.flatten() - cy
+
+    x_rot = cos_a * x_flat + sin_a * y_flat + cx
+    y_rot = -sin_a * x_flat + cos_a * y_flat + cy
+
+    x_rot = np.round(x_rot).astype(int)
+    y_rot = np.round(y_rot).astype(int)
+
+    mask = (x_rot >= 0) & (x_rot < w) & (y_rot >= 0) & (y_rot < h)
+    rotated_image = np.zeros_like(image)
+    rotated_image[y.flatten()[mask], x.flatten()[mask]] = image[y_rot[mask], x_rot[mask]]
+    return rotated_image
